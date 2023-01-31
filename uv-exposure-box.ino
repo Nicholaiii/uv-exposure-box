@@ -1,18 +1,24 @@
 #include <TM1637Display.h>
 
-// Define the connections pins
+/* Display */
 const int CLK = 3;
 const int DIO = 4;
 
+const int killSwitch = 2; /* Nano has interrupts on 2+3 */
 const int incButton = 5;
 const int toggleButton = 6;
 const int startButton = 7;
-const int killSwitch = 2; /* Nano has interrupts on 2+3 */
+
 const int relayOne = 12;
 const int relayTwo = 13;
 
-bool running = false; /* not running at start */
+const int indicator = 8;
+
 int countDownTime = 1; /* initial time set to 1 second */
+unsigned long startedAt = 0;  /* will store what milli the run started */
+unsigned long previousMillis = 0; /* will store last cd update */
+volatile bool running = false; /* not running at start */
+const long interval = 1000; /* update interval in millis */
 
 const TM1637Display display = TM1637Display(CLK, DIO);
 
@@ -25,6 +31,7 @@ const uint8_t done[] = {
 
 void setup () {
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(indicator, OUTPUT);
   pinMode(relayOne, OUTPUT);
   pinMode(relayTwo, OUTPUT);
 
@@ -32,28 +39,31 @@ void setup () {
   pinMode(toggleButton, INPUT_PULLUP);
   pinMode(startButton, INPUT_PULLUP);
   pinMode(killSwitch, INPUT_PULLUP);
+
   /* Should be maybe lower ? */
   display.setBrightness(5);
   renderDisplay();
+
+  attachInterrupt(digitalPinToInterrupt(killSwitch), killInterrupt, CHANGE);
+}
+
+void loop () {
+  if (digitalRead(startButton) == LOW) begin();
+  
+  if (running) return countdown();
+
+  handleInput();
+}
+
+void killInterrupt () {
+  const bool state = digitalRead(killSwitch);
+  if (state == LOW) setState(false);
+  digitalWrite(LED_BUILTIN, state);
 }
 
 void relay (bool state) {
   digitalWrite(relayOne, state);
   digitalWrite(relayTwo, state);
-}
-
-bool handleDelay () {
-  for (int i = 20; i >=1; i--) {
-    if (!running) return false;
-    if (digitalRead(killSwitch) == LOW) {
-      delay(50);
-      return true;
-    } else {
-      running = false;
-      relay(false);
-      return false;
-    }
-  }
 }
 
 void renderDisplay () {
@@ -63,45 +73,38 @@ void renderDisplay () {
 }
 
 void countdown () {
-  relay(running);
-  if (!handleDelay()) return;
-  countDownTime -= 1;
-  if (countDownTime == 0) {
-    return finish();
-  }
-  renderDisplay();
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= interval) {
+    /* Store that we just updated */
+    previousMillis = currentMillis;
+    countDownTime -= 1;    
+    if (countDownTime == 0) return finish();
+    renderDisplay();
+  }  
+}
+
+void begin () {
+  if (countDownTime == 0 || running) return renderDisplay();
+  previousMillis = millis();
+  setState(true);
 }
 
 void finish () {
-  stop();
+  setState(false);
+  previousMillis = 0;
   display.clear();
 	display.setSegments(done);
 }
 
-void stop () {
-  running = false;
-  relay(false);
-  digitalWrite(LED_BUILTIN, 0);
+void setState (bool state) {
+  running = state;
+  relay(state);
+  digitalWrite(indicator, state);
 }
 
-void loop () {
-  digitalWrite(LED_BUILTIN, digitalRead(killSwitch));
-
-  if (digitalRead(startButton) == LOW) {
-    if (countDownTime == 0) return renderDisplay();
-    running = true;  
-  }
-  
-  if (running) {
-    return countdown();
-  }
-
-  if (digitalRead(incButton) == LOW) {
-    if (digitalRead(toggleButton) == LOW) {
-      countDownTime += 60; // increase time by 1 minute
-    } else {
-      countDownTime += 1; // increase time by 1 seconds
-    }
+void handleInput () {
+ if (digitalRead(incButton) == LOW) {
+    countDownTime += digitalRead(toggleButton) == HIGH ? 60 : 1;
     renderDisplay();
     delay(200);
   }
