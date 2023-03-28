@@ -5,16 +5,16 @@ const int CLK = 3;
 const int DIO = 4;
 
 const int killSwitch = 2; /* Nano has interrupts on 2+3 */
-const int incButton = 5;
-const int toggleButton = 6;
+const int toggleButton = 5;
+const int incButton = 6;
 const int startButton = 7;
 
-const int relayOne = 12;
-const int relayTwo = 13;
+const int relayOne = 11;
+const int relayTwo = 12;
 
 const int indicator = 8;
 
-int countDownTime = 1; /* initial time set to 1 second */
+int countDownTime = 10; /* initial time set to 10 seconds */
 unsigned long startedAt = 0;  /* will store what milli the run started */
 unsigned long previousMillis = 0; /* will store last cd update */
 volatile bool running = false; /* not running at start */
@@ -48,7 +48,8 @@ void setup () {
 }
 
 void loop () {
-  if (digitalRead(startButton) == LOW) begin();
+  if (digitalRead(startButton) == LOW
+  && digitalRead(killSwitch) == LOW) begin();
   
   if (running) return countdown();
 
@@ -56,9 +57,10 @@ void loop () {
 }
 
 void killInterrupt () {
+  /* Killswitch goes HIGH when disconnected from magnet */
   const bool state = digitalRead(killSwitch);
-  if (state == LOW) setState(false);
-  digitalWrite(LED_BUILTIN, state);
+  if (state == HIGH) setState(false);
+  digitalWrite(LED_BUILTIN, !state); 
 }
 
 void relay (bool state) {
@@ -104,7 +106,7 @@ void setState (bool state) {
 
 void handleInput () {
  if (digitalRead(incButton) == LOW) {
-    countDownTime += digitalRead(toggleButton) == HIGH ? 60 : 1;
+    countDownTime += digitalRead(toggleButton) == HIGH ? 1 : 60;
     renderDisplay();
     delay(200);
   }
